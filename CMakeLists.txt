@@ -347,6 +347,7 @@ macro(open3d_patch_findthreads_module_)
 endmacro()
 cmake_language(EVAL CODE "cmake_language(DEFER CALL open3d_patch_findthreads_module_)")
 
+set(CMAKE_CUDA_COMPILER /usr/local/cuda-11/bin/nvcc)
 # Build CUDA module by default if CUDA is available
 if(BUILD_CUDA_MODULE)
     include(Open3DMakeCudaArchitectures)
