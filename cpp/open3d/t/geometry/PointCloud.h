@@ -124,6 +124,9 @@ public:
     /// Getter for point_attr_ TensorMap. Used in Pybind.
     const TensorMap &GetPointAttr() const { return point_attr_; }
 
+    /// Getter for point_attr_ TensorMap.
+    TensorMap &GetPointAttr() { return point_attr_; }
+
     /// Get attributes. Throws exception if the attribute does not exist.
     ///
     /// \param key Attribute name.
@@ -318,27 +321,64 @@ public:
     /// \param boolean_mask Boolean indexing tensor of shape {n,} containing
     /// true value for the indices that is to be selected.
     /// \param invert Set to `True` to invert the selection of indices.
-    PointCloud SelectPoints(const core::Tensor &boolean_mask,
+    PointCloud SelectByMask(const core::Tensor &boolean_mask,
                             bool invert = false) const;
 
+    /// \brief Select points from input pointcloud, based on indices list into
+    /// output point cloud.
+    ///
+    /// \param indices Int64 indexing tensor of shape {n,} containing
+    /// index value that is to be selected.
+    /// \param invert Set to `True` to invert the selection of indices, and also
+    /// ignore the duplicated indices.
+    /// \param remove_duplicates Set to `True` to remove the duplicated indices.
+    PointCloud SelectByIndex(const core::Tensor &indices,
+                             bool invert = false,
+                             bool remove_duplicates = false) const;
+
     /// \brief Downsamples a point cloud with a specified voxel size.
+    ///
     /// \param voxel_size Voxel size. A positive number.
     PointCloud VoxelDownSample(double voxel_size,
                                const core::HashBackendType &backend =
                                        core::HashBackendType::Default) const;
+
+    /// \brief Downsamples a point cloud by selecting every kth index point and
+    /// its attributes.
+    ///
+    /// \param every_k_points Sample rate, the selected point indices are [0, k,
+    /// 2k, …].
+    PointCloud UniformDownSample(size_t every_k_points) const;
+
+    /// \brief Downsample a pointcloud by selecting random index point and its
+    /// attributes.
+    ///
+    /// \param sampling_ratio Sampling ratio, the ratio of sample to total
+    /// number of points in the pointcloud.
+    PointCloud RandomDownSample(double sampling_ratio) const;
 
     /// \brief Remove points that have less than \p nb_points neighbors in a
     /// sphere of a given radius.
     ///
     /// \param nb_points Number of neighbor points required within the radius.
     /// \param search_radius Radius of the sphere.
-    /// \return tuple of filtered PointCloud and boolean indexing tensor
-    /// w.r.t. input point cloud.
+    /// \return tuple of filtered point cloud and boolean mask tensor for
+    /// selected values w.r.t. input point cloud.
     std::tuple<PointCloud, core::Tensor> RemoveRadiusOutliers(
             size_t nb_points, double search_radius) const;
 
+    /// \brief Remove all points from the point cloud that have a nan entry, or
+    /// infinite value. It also removes the corresponding attributes.
+    ///
+    /// \param remove_nan Remove NaN values from the PointCloud.
+    /// \param remove_infinite Remove infinite values from the PointCloud.
+    /// \return tuple of filtered point cloud and boolean mask tensor for
+    /// selected values w.r.t. input point cloud.
+    std::tuple<PointCloud, core::Tensor> RemoveNonFinitePoints(
+            bool remove_nan = true, bool remove_infinite = true) const;
+
     /// \brief Returns the device attribute of this PointCloud.
-    core::Device GetDevice() const { return device_; }
+    core::Device GetDevice() const override { return device_; }
 
     /// \brief Cluster PointCloud using the DBSCAN algorithm
     /// Ester et al., "A Density-Based Algorithm for Discovering Clusters

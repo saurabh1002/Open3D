@@ -24,28 +24,23 @@
 // IN THE SOFTWARE.
 // ----------------------------------------------------------------------------
 
-#include <vtkPolyData.h>
-#include <vtkSmartPointer.h>
+#include "open3d/utility/Random.h"
 
-#include "open3d/t/geometry/Geometry.h"
-#include "open3d/t/geometry/PointCloud.h"
-#include "open3d/t/geometry/TriangleMesh.h"
+#include "pybind/docstring.h"
+#include "pybind/open3d_pybind.h"
 
 namespace open3d {
-namespace t {
-namespace geometry {
-namespace kernel {
-namespace vtkutils {
+namespace utility {
 
-/// Creates a vtkPolyData object from a point cloud or triangle mesh.
-vtkSmartPointer<vtkPolyData> CreateVtkPolyDataFromGeometry(
-        const Geometry& geometry);
+void pybind_random(py::module &m) {
+    py::module m_submodule = m.def_submodule("random");
 
-/// Creates a triangle mesh from a vtkPolyData object.
-TriangleMesh CreateTriangleMeshFromVtkPolyData(vtkPolyData* polyData);
+    m_submodule.def("seed", &random::Seed, "seed"_a,
+                    "Set Open3D global random seed.");
 
-}  // namespace vtkutils
-}  // namespace kernel
-}  // namespace geometry
-}  // namespace t
+    docstring::FunctionDocInject(m_submodule, "seed",
+                                 {{"seed", "Random seed value."}});
+}
+
+}  // namespace utility
 }  // namespace open3d

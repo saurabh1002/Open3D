@@ -48,7 +48,7 @@ namespace core {
 
 /// A Tensor is a "view" of a data Blob with shape, stride, data_ptr.
 /// Tensor can also be used to perform numerical operations.
-class Tensor {
+class Tensor : public IsDevice {
 public:
     Tensor() {}
 
@@ -572,15 +572,15 @@ public:
     /// Convert to constant rvalue.
     const Tensor AsRvalue() const { return *this; }
 
-    /// \brief Advanced indexing getter
+    /// \brief Advanced indexing getter. This will always allocate a new Tensor.
     ///
-    /// We use the Numpy advanced indexing symnatics, see:
+    /// We use the Numpy advanced indexing semantics, see:
     /// https://docs.scipy.org/doc/numpy/reference/arrays.indexing.html
     Tensor IndexGet(const std::vector<Tensor>& index_tensors) const;
 
     /// \brief Advanced indexing getter.
     ///
-    /// We use the Numpy advanced indexing symnatics, see:
+    /// We use the Numpy advanced indexing semantics, see:
     /// https://docs.scipy.org/doc/numpy/reference/arrays.indexing.html
     ///
     /// Note: Only support 1D index tensors.
@@ -949,14 +949,14 @@ public:
     bool IsNonZero() const;
 
     /// Returns true if all elements in the tensor are true. Only works for
-    /// boolean tensors. This function does not take reduction dimensions, and
-    /// the reduction is applied to all dimensions.
-    bool All() const;
+    /// boolean tensors.
+    Tensor All(const utility::optional<SizeVector>& dims = utility::nullopt,
+               bool keepdim = false) const;
 
     /// Returns true if any elements in the tensor are true. Only works for
-    /// boolean tensors. This function does not take reduction dimensions, and
-    /// the reduction is applied to all dimensions.
-    bool Any() const;
+    /// boolean tensors.
+    Tensor Any(const utility::optional<SizeVector>& dims = utility::nullopt,
+               bool keepdim = false) const;
 
     /// Returns true if the two tensors are element-wise equal.
     ///
@@ -1162,7 +1162,7 @@ public:
 
     inline Dtype GetDtype() const { return dtype_; }
 
-    Device GetDevice() const;
+    Device GetDevice() const override;
 
     inline std::shared_ptr<Blob> GetBlob() const { return blob_; }
 

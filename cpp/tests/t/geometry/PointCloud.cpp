@@ -28,6 +28,8 @@
 
 #include <gmock/gmock.h>
 
+#include <limits>
+
 #include "core/CoreTest.h"
 #include "open3d/core/Tensor.h"
 #include "open3d/data/Dataset.h"
@@ -563,88 +565,89 @@ TEST_P(PointCloudPermuteDevices, CreateFromRGBDOrDepthImageWithNormals) {
     core::Tensor extrinsics = core::Tensor::Eye(4, core::Float32, device);
     int stride = 1;
     float depth_scale = 10.f, depth_max = 2.5f;
-    // clang-format off
-    core::Tensor t_depth(std::vector<uint16_t>{
-        1, 2, 3, 2, 1,
-        1, 3, 5, 3, 1,
-        1, 4, 7, 4, 30,
-        1, 3, 5, 3, 1,
-        1, 2, 3, 2, 1},
-        {5, 5, 1}, core::UInt16, device);
-    core::Tensor t_color(std::vector<float>{
-        0,0,0, 0.1,0.1,0.1, 0.2,0.2,0.2, 0.1,0.1,0.1, 0.0,0.0,0.0,
-        0,0,0, 0.2,0.2,0.2, 0.4,0.4,0.4, 0.2,0.2,0.2, 0.0,0.0,0.0,
-        0,0,0, 0.3,0.3,0.3, 0.6,0.6,0.6, 0.3,0.3,0.3, 0.9,0.9,0.9,
-        0,0,0, 0.2,0.2,0.2, 0.4,0.4,0.4, 0.2,0.2,0.2, 0.0,0.0,0.0,
-        0,0,0, 0.1,0.1,0.1, 0.2,0.2,0.2, 0.1,0.1,0.1, 0.0,0.0,0.0
-        }, {5, 5, 3}, core::Float32, device);
-    core::Tensor intrinsics(std::vector<double>{
-        1.f, 0.f, 2.f,
-        0.f, 1.f, 2.f,
-        0.f, 0.f, 1.f}, {3, 3}, core::Float64, device);
+    core::Tensor t_depth(
+            std::vector<uint16_t>{1, 2,  3, 2, 1, 1, 3, 5, 3, 1, 1, 4, 7,
+                                  4, 30, 1, 3, 5, 3, 1, 1, 2, 3, 2, 1},
+            {5, 5, 1}, core::UInt16, device);
+    core::Tensor t_color(
+            std::vector<float>{0,   0,   0,   0.1, 0.1, 0.1, 0.2, 0.2, 0.2, 0.1,
+                               0.1, 0.1, 0.0, 0.0, 0.0, 0,   0,   0,   0.2, 0.2,
+                               0.2, 0.4, 0.4, 0.4, 0.2, 0.2, 0.2, 0.0, 0.0, 0.0,
+                               0,   0,   0,   0.3, 0.3, 0.3, 0.6, 0.6, 0.6, 0.3,
+                               0.3, 0.3, 0.9, 0.9, 0.9, 0,   0,   0,   0.2, 0.2,
+                               0.2, 0.4, 0.4, 0.4, 0.2, 0.2, 0.2, 0.0, 0.0, 0.0,
+                               0,   0,   0,   0.1, 0.1, 0.1, 0.2, 0.2, 0.2, 0.1,
+                               0.1, 0.1, 0.0, 0.0, 0.0},
+            {5, 5, 3}, core::Float32, device);
+    core::Tensor intrinsics(
+            std::vector<double>{1.f, 0.f, 2.f, 0.f, 1.f, 2.f, 0.f, 0.f, 1.f},
+            {3, 3}, core::Float64, device);
     core::Tensor t_vertex_ref, t_color_ref, t_normal_ref;
     // CUDA has slightly different output due to NPP vs IPP differences.
-    if (device.GetType()==core::Device::DeviceType::CUDA) {
-        t_vertex_ref = core::Tensor::Init<float>({
-            {-0.288695, -0.288695, 0.144348},
-            {-0.233266, -0.466531, 0.233266},
-            {0.0, -0.555697, 0.277849},
-            {-0.333081, -0.166541, 0.166541},
-            {-0.299973, -0.299973, 0.299973},
-            {-0.355337, 0.0, 0.177669},
-            {-0.33346, 0.0, 0.33346},
-            {-0.333081, 0.166541, 0.166541},
-            {-0.299973, 0.299973, 0.299973}}, device);
-    t_color_ref = core::Tensor::Init<float>({
-            {0.0, 0.0, 0.0},
-            {0.1, 0.1, 0.1},
-            {0.2, 0.2, 0.2},
-            {0.0, 0.0, 0.0},
-            {0.2, 0.2, 0.2},
-            {0.0, 0.0, 0.0},
-            {0.3, 0.3, 0.3},
-            {0.0, 0.0, 0.0},
-            {0.2, 0.2, 0.2}}, device);
-    t_normal_ref = core::Tensor::Init<float>({
-            {0.941573, 0.329163, 0.071364},
-            {0.333815, 0.462634, -0.821302},
-            {-0.318447, 0.404408, -0.857348},
-            {0.984687, 0.138649, -0.105676},
-            {0.24427, 0.134471, -0.960338},
-            {0.980499, -0.140229, -0.137689},
-            {0.226005, -0.132954, -0.965010},
-            {0.941147, -0.325299, 0.0917771},
-            {0.289271, -0.453489, -0.843012}}, device);
+    if (device.IsCUDA()) {
+        t_vertex_ref =
+                core::Tensor::Init<float>({{-0.288695, -0.288695, 0.144348},
+                                           {-0.233266, -0.466531, 0.233266},
+                                           {0.0, -0.555697, 0.277849},
+                                           {-0.333081, -0.166541, 0.166541},
+                                           {-0.299973, -0.299973, 0.299973},
+                                           {-0.355337, 0.0, 0.177669},
+                                           {-0.33346, 0.0, 0.33346},
+                                           {-0.333081, 0.166541, 0.166541},
+                                           {-0.299973, 0.299973, 0.299973}},
+                                          device);
+        t_color_ref = core::Tensor::Init<float>({{0.0, 0.0, 0.0},
+                                                 {0.1, 0.1, 0.1},
+                                                 {0.2, 0.2, 0.2},
+                                                 {0.0, 0.0, 0.0},
+                                                 {0.2, 0.2, 0.2},
+                                                 {0.0, 0.0, 0.0},
+                                                 {0.3, 0.3, 0.3},
+                                                 {0.0, 0.0, 0.0},
+                                                 {0.2, 0.2, 0.2}},
+                                                device);
+        t_normal_ref =
+                core::Tensor::Init<float>({{0.941573, 0.329163, 0.071364},
+                                           {0.333815, 0.462634, -0.821302},
+                                           {-0.318447, 0.404408, -0.857348},
+                                           {0.984687, 0.138649, -0.105676},
+                                           {0.24427, 0.134471, -0.960338},
+                                           {0.980499, -0.140229, -0.137689},
+                                           {0.226005, -0.132954, -0.965010},
+                                           {0.941147, -0.325299, 0.0917771},
+                                           {0.289271, -0.453489, -0.843012}},
+                                          device);
     } else {
-        t_vertex_ref = core::Tensor::Init<float>({
-            {-0.292137, -0.292137, 0.146069},
-            {-0.230743, -0.461487, 0.230743},
-            {0.0, -0.569164, 0.284582},
-            {-0.353444, -0.176722, 0.176722},
-            {-0.277117, -0.277117, 0.277117},
-            {-0.399304, 0.0, 0.199652},
-            {-0.353444, 0.176722, 0.176722},
-            {-0.277117, 0.277117, 0.277117}}, device);
-        t_color_ref = core::Tensor::Init<float>({
-            {0.0, 0.0, 0.0},
-            {0.1, 0.1, 0.1},
-            {0.2, 0.2, 0.2},
-            {0.0, 0.0, 0.0},
-            {0.2, 0.2, 0.2},
-            {0.0, 0.0, 0.0},
-            {0.0, 0.0, 0.0},
-            {0.2, 0.2, 0.2}}, device);
-        t_normal_ref = core::Tensor::Init<float>({
-            {0.886676, 0.419108, 0.195331},
-            {0.351009, 0.310485, -0.883398},
-            {-0.303793, 0.183558, -0.934888},
-            {0.878084, 0.27837, -0.389203},
-            {0.209566, 0.0993332, -0.972736},
-            {0.687868, -0.266128, -0.675287},
-            {0.854888, -0.495199, -0.154739},
-            {0.238257, -0.29284, -0.926001}}, device);
+        t_vertex_ref =
+                core::Tensor::Init<float>({{-0.292137, -0.292137, 0.146069},
+                                           {-0.230743, -0.461487, 0.230743},
+                                           {0.0, -0.569164, 0.284582},
+                                           {-0.353444, -0.176722, 0.176722},
+                                           {-0.277117, -0.277117, 0.277117},
+                                           {-0.399304, 0.0, 0.199652},
+                                           {-0.353444, 0.176722, 0.176722},
+                                           {-0.277117, 0.277117, 0.277117}},
+                                          device);
+        t_color_ref = core::Tensor::Init<float>({{0.0, 0.0, 0.0},
+                                                 {0.1, 0.1, 0.1},
+                                                 {0.2, 0.2, 0.2},
+                                                 {0.0, 0.0, 0.0},
+                                                 {0.2, 0.2, 0.2},
+                                                 {0.0, 0.0, 0.0},
+                                                 {0.0, 0.0, 0.0},
+                                                 {0.2, 0.2, 0.2}},
+                                                device);
+        t_normal_ref =
+                core::Tensor::Init<float>({{0.886676, 0.419108, 0.195331},
+                                           {0.351009, 0.310485, -0.883398},
+                                           {-0.303793, 0.183558, -0.934888},
+                                           {0.878084, 0.27837, -0.389203},
+                                           {0.209566, 0.0993332, -0.972736},
+                                           {0.687868, -0.266128, -0.675287},
+                                           {0.854888, -0.495199, -0.154739},
+                                           {0.238257, -0.29284, -0.926001}},
+                                          device);
     }
-    // clang-format on
     t::geometry::Image im_depth{t_depth}, im_color{t_color};
 
     // with normals: go through CreateVertexMap() and CreateNormalMap()
@@ -672,7 +675,7 @@ TEST_P(PointCloudPermuteDevices, CreateFromRGBDOrDepthImageWithNormals) {
     EXPECT_TRUE(pcd_out.GetPointNormals().AllClose(t_normal_ref));
 }
 
-TEST_P(PointCloudPermuteDevices, SelectPoints) {
+TEST_P(PointCloudPermuteDevices, SelectByMask) {
     core::Device device = GetParam();
 
     const t::geometry::PointCloud pcd_small(
@@ -684,13 +687,67 @@ TEST_P(PointCloudPermuteDevices, SelectPoints) {
     const core::Tensor boolean_mask =
             core::Tensor::Init<bool>({true, false, false, true}, device);
 
-    const auto pcd_select = pcd_small.SelectPoints(boolean_mask, false);
+    const auto pcd_select = pcd_small.SelectByMask(boolean_mask, false);
     EXPECT_TRUE(
             pcd_select.GetPointPositions().AllClose(core::Tensor::Init<float>(
                     {{0.1, 0.3, 0.9}, {0.2, 0.4, 0.2}}, device)));
 
-    const auto pcd_select_invert = pcd_small.SelectPoints(boolean_mask, true);
+    const auto pcd_select_invert = pcd_small.SelectByMask(boolean_mask, true);
     EXPECT_TRUE(pcd_select_invert.GetPointPositions().AllClose(
+            core::Tensor::Init<float>({{0.9, 0.2, 0.4}, {0.3, 0.6, 0.8}},
+                                      device)));
+}
+
+TEST_P(PointCloudPermuteDevices, SelectByIndex) {
+    core::Device device = GetParam();
+
+    const t::geometry::PointCloud pcd_small(
+            core::Tensor::Init<float>({{0.1, 0.3, 0.9},
+                                       {0.9, 0.2, 0.4},
+                                       {0.3, 0.6, 0.8},
+                                       {0.2, 0.4, 0.2}},
+                                      device));
+    // Test indices without duplicated value.
+    const core::Tensor indices = core::Tensor::Init<int64_t>({0, 3}, device);
+
+    const auto pcd_select = pcd_small.SelectByIndex(indices, false);
+    EXPECT_TRUE(
+            pcd_select.GetPointPositions().AllClose(core::Tensor::Init<float>(
+                    {{0.1, 0.3, 0.9}, {0.2, 0.4, 0.2}}, device)));
+
+    const auto pcd_select_invert = pcd_small.SelectByIndex(indices, true);
+    EXPECT_TRUE(pcd_select_invert.GetPointPositions().AllClose(
+            core::Tensor::Init<float>({{0.9, 0.2, 0.4}, {0.3, 0.6, 0.8}},
+                                      device)));
+
+    // Test indices with duplicated value.
+    const core::Tensor duplicated_indices =
+            core::Tensor::Init<int64_t>({0, 0, 3, 3}, device);
+
+    const auto pcd_select_no_remove =
+            pcd_small.SelectByIndex(duplicated_indices, false, false);
+    EXPECT_TRUE(pcd_select_no_remove.GetPointPositions().AllClose(
+            core::Tensor::Init<float>({{0.1, 0.3, 0.9},
+                                       {0.1, 0.3, 0.9},
+                                       {0.2, 0.4, 0.2},
+                                       {0.2, 0.4, 0.2}},
+                                      device)));
+
+    const auto pcd_select_remove =
+            pcd_small.SelectByIndex(duplicated_indices, false, true);
+    EXPECT_TRUE(pcd_select_remove.GetPointPositions().AllClose(
+            core::Tensor::Init<float>({{0.1, 0.3, 0.9}, {0.2, 0.4, 0.2}},
+                                      device)));
+
+    const auto pcd_select_invert_no_remove =
+            pcd_small.SelectByIndex(duplicated_indices, true, false);
+    EXPECT_TRUE(pcd_select_invert_no_remove.GetPointPositions().AllClose(
+            core::Tensor::Init<float>({{0.9, 0.2, 0.4}, {0.3, 0.6, 0.8}},
+                                      device)));
+
+    const auto pcd_select_invert_remove =
+            pcd_small.SelectByIndex(duplicated_indices, true, true);
+    EXPECT_TRUE(pcd_select_invert_remove.GetPointPositions().AllClose(
             core::Tensor::Init<float>({{0.9, 0.2, 0.4}, {0.3, 0.6, 0.8}},
                                       device)));
 }
@@ -708,6 +765,42 @@ TEST_P(PointCloudPermuteDevices, VoxelDownSample) {
     auto pcd_small_down = pcd_small.VoxelDownSample(1);
     EXPECT_TRUE(pcd_small_down.GetPointPositions().AllClose(
             core::Tensor::Init<float>({{0, 0, 0}}, device)));
+}
+
+TEST_P(PointCloudPermuteDevices, UniformDownSample) {
+    core::Device device = GetParam();
+
+    // Value test.
+    t::geometry::PointCloud pcd_small(core::Tensor::Init<float>({{0, 0, 0},
+                                                                 {1, 0, 0},
+                                                                 {2, 0, 0},
+                                                                 {3, 0, 0},
+                                                                 {4, 0, 0},
+                                                                 {5, 0, 0},
+                                                                 {6, 0, 0},
+                                                                 {7, 0, 0}},
+                                                                device));
+    auto pcd_small_down = pcd_small.UniformDownSample(3);
+    EXPECT_TRUE(pcd_small_down.GetPointPositions().AllClose(
+            core::Tensor::Init<float>({{0, 0, 0}, {3, 0, 0}, {6, 0, 0}},
+                                      device)));
+}
+
+TEST_P(PointCloudPermuteDevices, RandomDownSample) {
+    core::Device device = GetParam();
+
+    // Value test.
+    t::geometry::PointCloud pcd_small(core::Tensor::Init<float>({{0, 0, 0},
+                                                                 {1, 0, 0},
+                                                                 {2, 0, 0},
+                                                                 {3, 0, 0},
+                                                                 {4, 0, 0},
+                                                                 {5, 0, 0},
+                                                                 {6, 0, 0},
+                                                                 {7, 0, 0}},
+                                                                device));
+    auto pcd_small_down = pcd_small.RandomDownSample(0.5);
+    EXPECT_TRUE(pcd_small_down.GetPointPositions().GetLength() == 4);
 }
 
 TEST_P(PointCloudPermuteDevices, RemoveRadiusOutliers) {
@@ -735,9 +828,54 @@ TEST_P(PointCloudPermuteDevices, RemoveRadiusOutliers) {
                                       device)));
 }
 
+TEST_P(PointCloudPermuteDevices, RemoveNonFinitePoints) {
+    core::Device device = GetParam();
+
+    const t::geometry::PointCloud pcd_small(core::Tensor::Init<float>(
+            {{std::numeric_limits<float>::infinity(), 1.0, 1.0},
+             {1.1, 1.1, 1.1},
+             {-std::numeric_limits<float>::infinity(), 1.2, 1.2},
+             {1.3, 1.3, 1.3},
+             {std::numeric_limits<float>::quiet_NaN(), 5.0, 5.0},
+             {5.1, 5.1, 5.1}},
+            device));
+
+    t::geometry::PointCloud output_pcd;
+    core::Tensor selected_boolean_mask;
+    // Remove NaN and Inf.
+    std::tie(output_pcd, selected_boolean_mask) =
+            pcd_small.RemoveNonFinitePoints(true, true);
+    EXPECT_TRUE(
+            output_pcd.GetPointPositions().AllClose(core::Tensor::Init<float>(
+                    {{1.1, 1.1, 1.1}, {1.3, 1.3, 1.3}, {5.1, 5.1, 5.1}},
+                    device)));
+    EXPECT_TRUE(selected_boolean_mask.AllClose(core::Tensor::Init<bool>(
+            {false, true, false, true, false, true}, device)));
+
+    // 2. Remove NaN only.
+    std::tie(output_pcd, selected_boolean_mask) =
+            pcd_small.RemoveNonFinitePoints(true, false);
+    EXPECT_TRUE(selected_boolean_mask.AllClose(core::Tensor::Init<bool>(
+            {true, true, true, true, false, true}, device)));
+
+    // 3. Remove Inf only.
+    std::tie(output_pcd, selected_boolean_mask) =
+            pcd_small.RemoveNonFinitePoints(false, true);
+    EXPECT_TRUE(selected_boolean_mask.AllClose(core::Tensor::Init<bool>(
+            {false, true, false, true, true, true}, device)));
+
+    // 4. Return original pcd.
+    std::tie(output_pcd, selected_boolean_mask) =
+            pcd_small.RemoveNonFinitePoints(false, false);
+    EXPECT_TRUE(selected_boolean_mask.AllClose(core::Tensor::Init<bool>(
+            {true, true, true, true, true, true}, device)));
+}
+
 TEST_P(PointCloudPermuteDevices, ClusterDBSCAN) {
     core::Device device = GetParam();
-    if (device.GetType() != core::Device::DeviceType::CPU) GTEST_SKIP();
+    if (!device.IsCPU()) {
+        GTEST_SKIP();
+    }
     t::geometry::PointCloud pcd;
     data::PLYPointCloud pointcloud_ply;
     t::io::ReadPointCloud(pointcloud_ply.GetPath(), pcd);
@@ -758,7 +896,9 @@ TEST_P(PointCloudPermuteDevices, ClusterDBSCAN) {
 
 TEST_P(PointCloudPermuteDevices, ComputeConvexHull) {
     core::Device device = GetParam();
-    if (device.GetType() != core::Device::DeviceType::CPU) GTEST_SKIP();
+    if (!device.IsCPU()) {
+        GTEST_SKIP();
+    }
     t::geometry::PointCloud pcd;
     t::geometry::TriangleMesh mesh;
 
