@@ -1,35 +1,23 @@
 // ----------------------------------------------------------------------------
 // -                        Open3D: www.open3d.org                            -
 // ----------------------------------------------------------------------------
-// The MIT License (MIT)
-//
-// Copyright (c) 2018-2021 www.open3d.org
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-// IN THE SOFTWARE.
+// Copyright (c) 2018-2023 www.open3d.org
+// SPDX-License-Identifier: MIT
 // ----------------------------------------------------------------------------
 
 #include "open3d/t/geometry/kernel/IPPImage.h"
 
+#ifdef APPLE  // macOS IPP <=v2021.9 uses old directory layout
 #include <iw++/iw_image_color.hpp>
 #include <iw++/iw_image_filter.hpp>
 #include <iw++/iw_image_op.hpp>
 #include <iw++/iw_image_transform.hpp>
+#else  // Linux and Windows IPP >=v2021.10 uses new directory layout
+#include <ipp/iw++/iw_image_color.hpp>
+#include <ipp/iw++/iw_image_filter.hpp>
+#include <ipp/iw++/iw_image_op.hpp>
+#include <ipp/iw++/iw_image_transform.hpp>
+#endif
 
 #include "open3d/core/Dtype.h"
 #include "open3d/core/ParallelFor.h"
@@ -67,7 +55,7 @@ void To(const core::Tensor &src_im,
     try {
         ::ipp::iwiScale(ipp_src_im, ipp_dst_im, scale, offset);
     } catch (const ::ipp::IwException &e) {
-        // See comments in icv/include/ippicv_types.h for m_status meaning
+        // See comments in ipp/ipptypes.h for m_status meaning
         utility::LogError("IPP-IW error {}: {}", e.m_status, e.m_string);
     }
 }
@@ -90,7 +78,7 @@ void RGBToGray(const core::Tensor &src_im, core::Tensor &dst_im) {
         ::ipp::iwiColorConvert(ipp_src_im, ::ipp::iwiColorRGB, ipp_dst_im,
                                ::ipp::iwiColorGray);
     } catch (const ::ipp::IwException &e) {
-        // See comments in icv/include/ippicv_types.h for m_status meaning
+        // See comments in ipp/ipptypes.h for m_status meaning
         utility::LogError("IPP-IW error {}: {}", e.m_status, e.m_string);
     }
 }
@@ -123,13 +111,14 @@ void Resize(const open3d::core::Tensor &src_im,
 
     auto it = type_dict.find(interp_type);
     if (it == type_dict.end()) {
-        utility::LogError("Unsupported interp type {}", interp_type);
+        utility::LogError("Unsupported interp type {}",
+                          static_cast<int>(interp_type));
     }
 
     try {
         ::ipp::iwiResize(ipp_src_im, ipp_dst_im, it->second);
     } catch (const ::ipp::IwException &e) {
-        // See comments in icv/include/ippicv_types.h for m_status meaning
+        // See comments in ipp/ipptypes.h for m_status meaning
         utility::LogError("IPP-IW error {}: {}", e.m_status, e.m_string);
     }
 }
@@ -166,7 +155,7 @@ void Dilate(const core::Tensor &src_im, core::Tensor &dst_im, int kernel_size) {
                 ::ipp::IwDefault(), /* Do not use IwiFilterMorphologyParams() */
                 ippBorderRepl);
     } catch (const ::ipp::IwException &e) {
-        // See comments in icv/include/ippicv_types.h for m_status meaning
+        // See comments in ipp/ipptypes.h for m_status meaning
         utility::LogError("IPP-IW error {}: {}", e.m_status, e.m_string);
     }
 }
@@ -198,7 +187,7 @@ void Filter(const open3d::core::Tensor &src_im,
     try {
         ::ipp::iwiFilter(ipp_src_im, ipp_dst_im, ipp_kernel);
     } catch (const ::ipp::IwException &e) {
-        // See comments in icv/include/ippicv_types.h for m_status meaning
+        // See comments in ipp/ipptypes.h for m_status meaning
         utility::LogError("IPP-IW error {}: {}", e.m_status, e.m_string);
     }
 };
@@ -229,7 +218,7 @@ void FilterBilateral(const core::Tensor &src_im,
                                   value_sigma * value_sigma,
                                   distance_sigma * distance_sigma);
     } catch (const ::ipp::IwException &e) {
-        // See comments in icv/include/ippicv_types.h for m_status meaning
+        // See comments in ipp/ipptypes.h for m_status meaning
         utility::LogError("IPP-IW error {}: {}", e.m_status, e.m_string);
     }
 }
@@ -257,7 +246,7 @@ void FilterGaussian(const core::Tensor &src_im,
     try {
         ::ipp::iwiFilterGaussian(ipp_src_im, ipp_dst_im, kernel_size, sigma);
     } catch (const ::ipp::IwException &e) {
-        // See comments in icv/include/ippicv_types.h for m_status meaning
+        // See comments in ipp/ipptypes.h for m_status meaning
         utility::LogError("IPP-IW error {}: {}", e.m_status, e.m_string);
     }
 }
@@ -305,7 +294,7 @@ void FilterSobel(const core::Tensor &src_im,
         // so we need to negate it in-place.
         dst_im_dx.Neg_();
     } catch (const ::ipp::IwException &e) {
-        // See comments in icv/include/ippicv_types.h for m_status meaning
+        // See comments in ipp/ipptypes.h for m_status meaning
         utility::LogError("IPP-IW error {}: {}", e.m_status, e.m_string);
     }
 }

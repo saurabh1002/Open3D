@@ -1,27 +1,8 @@
 // ----------------------------------------------------------------------------
 // -                        Open3D: www.open3d.org                            -
 // ----------------------------------------------------------------------------
-// The MIT License (MIT)
-//
-// Copyright (c) 2018-2021 www.open3d.org
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-// IN THE SOFTWARE.
+// Copyright (c) 2018-2023 www.open3d.org
+// SPDX-License-Identifier: MIT
 // ----------------------------------------------------------------------------
 
 #include "open3d/geometry/PointCloud.h"
@@ -37,10 +18,15 @@
 namespace open3d {
 namespace visualization {
 
-void pybind_visualization_utility(py::module &m) {
+void pybind_visualization_utility_declarations(py::module &m) {
     py::class_<SelectionPolygonVolume> selection_volume(
             m, "SelectionPolygonVolume",
             "Select a polygon volume for cropping.");
+}
+
+void pybind_visualization_utility_definitions(py::module &m) {
+    auto selection_volume = static_cast<py::class_<SelectionPolygonVolume>>(
+            m.attr("SelectionPolygonVolume"));
     py::detail::bind_default_constructor<SelectionPolygonVolume>(
             selection_volume);
     py::detail::bind_copy_functions<SelectionPolygonVolume>(selection_volume);
@@ -59,6 +45,13 @@ void pybind_visualization_utility(py::module &m) {
                         return s.CropTriangleMesh(input);
                     },
                     "input"_a, "Function to crop crop triangle mesh.")
+            .def(
+                    "crop_in_polygon",
+                    [](const SelectionPolygonVolume &s,
+                       const geometry::PointCloud &input) {
+                        return s.CropInPolygon(input);
+                    },
+                    "input"_a, "Function to crop 3d point clouds.")
             .def("__repr__",
                  [](const SelectionPolygonVolume &s) {
                      return std::string(
@@ -84,36 +77,37 @@ void pybind_visualization_utility(py::module &m) {
     docstring::ClassMethodDocInject(m, "SelectionPolygonVolume",
                                     "crop_triangle_mesh",
                                     {{"input", "The input triangle mesh."}});
-}
-
-// Visualization util functions have similar arguments, sharing arg docstrings
-static const std::unordered_map<std::string, std::string>
-        map_shared_argument_docstrings = {
-                {"callback_function",
-                 "Call back function to be triggered at a key press event."},
-                {"filename", "The file path."},
-                {"geometry_list", "List of geometries to be visualized."},
-                {"height", "The height of the visualization window."},
-                {"key_to_callback", "Map of key to call back functions."},
-                {"left", "The left margin of the visualization window."},
-                {"optional_view_trajectory_json_file",
-                 "Camera trajectory json file path for custom animation."},
-                {"top", "The top margin of the visualization window."},
-                {"width", "The width of the visualization window."},
-                {"point_show_normal",
-                 "Visualize point normals if set to true."},
-                {"mesh_show_wireframe",
-                 "Visualize mesh wireframe if set to true."},
-                {"mesh_show_back_face",
-                 "Visualize also the back face of the mesh triangles."},
-                {"window_name",
-                 "The displayed title of the visualization window."},
-                {"lookat", "The lookat vector of the camera."},
-                {"up", "The up vector of the camera."},
-                {"front", "The front vector of the camera."},
-                {"zoom", "The zoom of the camera."}};
-
-void pybind_visualization_utility_methods(py::module &m) {
+    docstring::ClassMethodDocInject(m, "SelectionPolygonVolume",
+                                    "crop_in_polygon",
+                                    {{"input", "The input point cloud xyz."}});
+    // Visualization util functions have similar arguments, sharing arg
+    // docstrings
+    static const std::unordered_map<std::string, std::string>
+            map_shared_argument_docstrings = {
+                    {"callback_function",
+                     "Call back function to be triggered at a key press "
+                     "event."},
+                    {"filename", "The file path."},
+                    {"geometry_list", "List of geometries to be visualized."},
+                    {"height", "The height of the visualization window."},
+                    {"key_to_callback", "Map of key to call back functions."},
+                    {"left", "The left margin of the visualization window."},
+                    {"optional_view_trajectory_json_file",
+                     "Camera trajectory json file path for custom animation."},
+                    {"top", "The top margin of the visualization window."},
+                    {"width", "The width of the visualization window."},
+                    {"point_show_normal",
+                     "Visualize point normals if set to true."},
+                    {"mesh_show_wireframe",
+                     "Visualize mesh wireframe if set to true."},
+                    {"mesh_show_back_face",
+                     "Visualize also the back face of the mesh triangles."},
+                    {"window_name",
+                     "The displayed title of the visualization window."},
+                    {"lookat", "The lookat vector of the camera."},
+                    {"up", "The up vector of the camera."},
+                    {"front", "The front vector of the camera."},
+                    {"zoom", "The zoom of the camera."}};
     m.def(
             "draw_geometries",
             [](const std::vector<std::shared_ptr<const geometry::Geometry>>
@@ -163,12 +157,12 @@ void pybind_visualization_utility_methods(py::module &m) {
             [](const std::vector<std::shared_ptr<const geometry::Geometry>>
                        &geometry_ptrs,
                const std::string &window_name, int width, int height, int left,
-               int top, const std::string &json_filename) {
+               int top, const fs::path &json_filename) {
                 std::string current_dir =
                         utility::filesystem::GetWorkingDirectory();
                 DrawGeometriesWithCustomAnimation(geometry_ptrs, window_name,
                                                   width, height, left, top,
-                                                  json_filename);
+                                                  json_filename.string());
                 utility::filesystem::ChangeWorkingDirectory(current_dir);
             },
             "Function to draw a list of geometry::Geometry objects with a GUI "
@@ -260,9 +254,9 @@ void pybind_visualization_utility_methods(py::module &m) {
 
     m.def(
             "read_selection_polygon_volume",
-            [](const std::string &filename) {
+            [](const fs::path &filename) {
                 SelectionPolygonVolume vol;
-                io::ReadIJsonConvertible(filename, vol);
+                io::ReadIJsonConvertible(filename.string(), vol);
                 return vol;
             },
             "Function to read SelectionPolygonVolume from file", "filename"_a);

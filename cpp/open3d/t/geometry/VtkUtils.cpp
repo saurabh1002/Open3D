@@ -1,27 +1,8 @@
 // ----------------------------------------------------------------------------
 // -                        Open3D: www.open3d.org                            -
 // ----------------------------------------------------------------------------
-// The MIT License (MIT)
-//
-// Copyright (c) 2018-2021 www.open3d.org
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-// IN THE SOFTWARE.
+// Copyright (c) 2018-2023 www.open3d.org
+// SPDX-License-Identifier: MIT
 // ----------------------------------------------------------------------------
 
 #include "open3d/t/geometry/VtkUtils.h"
@@ -31,8 +12,15 @@
 #include <vtkCellData.h>
 #include <vtkDoubleArray.h>
 #include <vtkFloatArray.h>
+#include <vtkImageData.h>
+#include <vtkLinearExtrusionFilter.h>
 #include <vtkPointData.h>
 #include <vtkPoints.h>
+#include <vtkPolyDataNormals.h>
+#include <vtkRotationalExtrusionFilter.h>
+#include <vtkTriangleFilter.h>
+
+#include <map>
 
 namespace open3d {
 namespace t {
@@ -81,6 +69,7 @@ struct VtkToTensorType<long long> {
     typedef int64_t TensorType;
 };
 
+namespace {
 struct CreateTensorFromVtkDataArrayWorker {
     bool copy;
     vtkDataArray* data_array;
@@ -121,6 +110,7 @@ struct CreateTensorFromVtkDataArrayWorker {
         }
     }
 };
+}  // namespace
 
 /// Creates a tensor from a vtkDataArray.
 /// The returned Tensor may directly use the memory of the array if device (CPU)
@@ -193,6 +183,35 @@ static vtkSmartPointer<vtkPoints> CreateVtkPointsFromTensor(
     return pts;
 }
 
+OPEN3D_LOCAL vtkSmartPointer<vtkImageData> CreateVtkImageDataFromTensor(
+        core::Tensor& tensor, bool copy) {
+    core::AssertTensorDtypes(tensor,
+                             {core::UInt8, core::Float32, core::Float64});
+    if (tensor.NumDims() != 2 && tensor.NumDims() != 3) {
+        utility::LogError(
+                "Cannot convert Tensor to vtkImageData. The number of "
+                "dimensions must be 2 or 3 but is {}",
+                tensor.NumDims());
+    }
+
+    // Create a flat tensor that can be converted to a vtkDataArray
+    auto tensor_flat = tensor.Reshape({tensor.NumElements(), 1});
+    if (tensor.GetDataPtr() != tensor_flat.GetDataPtr()) {
+        copy = true;
+    }
+    auto data_array = CreateVtkDataArrayFromTensor(tensor_flat, copy);
+
+    vtkSmartPointer<vtkImageData> im = vtkSmartPointer<vtkImageData>::New();
+    im->GetPointData()->SetScalars(data_array);
+    std::array<int, 3> size{1, 1, 1};
+    for (int i = 0; i < tensor.NumDims(); ++i) {
+        size[i] = tensor.GetShape(tensor.NumDims() - i - 1);
+    }
+    im->SetDimensions(size.data());
+    return im;
+}
+
+namespace {
 // Helper for creating the offset array from Common/DataModel/vtkCellArray.cxx
 struct GenerateOffsetsImpl {
     vtkIdType CellSize;
@@ -208,6 +227,7 @@ struct GenerateOffsetsImpl {
                                    this->ConnectivityArraySize);
     }
 };
+}  // namespace
 
 /// Creates a vtkCellArray from a Tensor.
 /// The returned array may directly use the memory of the tensor and the tensor
@@ -222,7 +242,9 @@ static vtkSmartPointer<vtkCellArray> CreateVtkCellArrayFromTensor(
     const int cell_size = tensor.GetShape()[1];
 
     auto tensor_flat = tensor.Reshape({tensor.NumElements(), 1}).Contiguous();
-    copy = copy && tensor.GetDataPtr() == tensor_flat.GetDataPtr();
+    if (tensor.GetDataPtr() != tensor_flat.GetDataPtr()) {
+        copy = true;
+    }
     auto connectivity = CreateVtkDataArrayFromTensor(tensor_flat, copy);
 
     // vtk nightly build (9.1.20220520) has a function cells->SetData(cell_size,
@@ -292,8 +314,10 @@ static void AddVtkFieldDataToTensorMap(TensorMap& tmap,
                                        bool copy) {
     for (int i = 0; i < field_data->GetNumberOfArrays(); ++i) {
         auto array = field_data->GetArray(i);
-        std::string array_name = array->GetName();
-        tmap[array_name] = CreateTensorFromVtkDataArray(array, copy);
+        char* array_name = array->GetName();
+        if (array_name) {
+            tmap[array_name] = CreateTensorFromVtkDataArray(array, copy);
+        }
     }
 }
 
@@ -317,17 +341,19 @@ static void AddTensorMapToVtkFieldData(
             continue;
         }
         // we only support 2D tensors
-        if (key_tensor.second.NumDims() != 2) {
-            utility::LogWarning(
-                    "Ignoring attribute '{}' for TensorMap with primary key "
-                    "'{}' because of incompatible ndim={}",
-                    key_tensor.first, tmap.GetPrimaryKey(),
-                    key_tensor.second.NumDims());
-            continue;
-        }
 
         if (include.count(key_tensor.first) &&
             !exclude.count(key_tensor.first)) {
+            if (key_tensor.second.NumDims() != 2) {
+                utility::LogWarning(
+                        "Ignoring attribute '{}' for TensorMap with primary "
+                        "key "
+                        "'{}' because of incompatible ndim={}",
+                        key_tensor.first, tmap.GetPrimaryKey(),
+                        key_tensor.second.NumDims());
+                continue;
+            }
+
             auto array = CreateVtkDataArrayFromTensor(key_tensor.second, copy);
             array->SetName(key_tensor.first.c_str());
             field_data->AddArray(array);
@@ -367,6 +393,19 @@ vtkSmartPointer<vtkPolyData> CreateVtkPolyDataFromGeometry(
                                    copy, point_attr_include,
                                    point_attr_exclude);
 
+    } else if (geometry.GetGeometryType() == Geometry::GeometryType::LineSet) {
+        auto lineset = static_cast<const LineSet&>(geometry);
+        polydata->SetPoints(
+                CreateVtkPointsFromTensor(lineset.GetPointPositions(), copy));
+        polydata->SetLines(
+                CreateVtkCellArrayFromTensor(lineset.GetLineIndices(), copy));
+
+        AddTensorMapToVtkFieldData(polydata->GetPointData(),
+                                   lineset.GetPointAttr(), copy,
+                                   point_attr_include, point_attr_exclude);
+        AddTensorMapToVtkFieldData(polydata->GetCellData(),
+                                   lineset.GetLineAttr(), copy,
+                                   face_attr_include, face_attr_exclude);
     } else if (geometry.GetGeometryType() ==
                Geometry::GeometryType::TriangleMesh) {
         auto mesh = static_cast<const TriangleMesh&>(geometry);
@@ -383,7 +422,7 @@ vtkSmartPointer<vtkPolyData> CreateVtkPolyDataFromGeometry(
                                    face_attr_include, face_attr_exclude);
     } else {
         utility::LogError("Unsupported geometry type {}",
-                          geometry.GetGeometryType());
+                          static_cast<int>(geometry.GetGeometryType()));
     }
 
     return polydata;
@@ -410,7 +449,170 @@ TriangleMesh CreateTriangleMeshFromVtkPolyData(vtkPolyData* polydata,
                                copy);
     AddVtkFieldDataToTensorMap(mesh.GetTriangleAttr(), polydata->GetCellData(),
                                copy);
+
+    // rename some attributes generated by vtk.
+    // Mapping: vtk name -> o3d name
+    std::map<std::string, std::string> rename_map = {{"Normals", "normals"}};
+    for (auto item : rename_map) {
+        if (mesh.HasVertexAttr(item.first) &&
+            !mesh.HasVertexAttr(item.second)) {
+            auto value = mesh.GetVertexAttr(item.first);
+            mesh.RemoveVertexAttr(item.first);
+            mesh.SetVertexAttr(item.second, value);
+        }
+        if (mesh.HasTriangleAttr(item.first) &&
+            !mesh.HasTriangleAttr(item.second)) {
+            auto value = mesh.GetTriangleAttr(item.first);
+            mesh.RemoveTriangleAttr(item.first);
+            mesh.SetTriangleAttr(item.second, value);
+        }
+    }
     return mesh;
+}
+
+OPEN3D_LOCAL LineSet CreateLineSetFromVtkPolyData(vtkPolyData* polydata,
+                                                  bool copy) {
+    if (!polydata->GetPoints()) {
+        return LineSet();
+    }
+    core::Tensor vertices = CreateTensorFromVtkDataArray(
+            polydata->GetPoints()->GetData(), copy);
+
+    core::Tensor lines =
+            CreateTensorFromVtkCellArray(polydata->GetLines(), copy);
+    // Some algorithms return an empty tensor with shape (0,0).
+    // Fix the last dim here.
+    if (lines.GetShape() == core::SizeVector{0, 0}) {
+        lines = lines.Reshape({0, 2});
+    }
+    LineSet lineset(vertices, lines);
+
+    AddVtkFieldDataToTensorMap(lineset.GetPointAttr(), polydata->GetPointData(),
+                               copy);
+    AddVtkFieldDataToTensorMap(lineset.GetLineAttr(), polydata->GetCellData(),
+                               copy);
+    return lineset;
+}
+
+static vtkSmartPointer<vtkPolyData> ExtrudeRotationPolyData(
+        const Geometry& geometry,
+        const double angle,
+        const core::Tensor& axis,
+        int resolution,
+        double translation,
+        bool capping) {
+    core::AssertTensorShape(axis, {3});
+    // allow int types for convenience
+    core::AssertTensorDtypes(
+            axis, {core::Float32, core::Float64, core::Int32, core::Int64});
+    auto axis_ = axis.To(core::Device(), core::Float64).Contiguous();
+
+    auto polydata =
+            CreateVtkPolyDataFromGeometry(geometry, {}, {}, {}, {}, false);
+
+    vtkNew<vtkRotationalExtrusionFilter> extrude;
+    extrude->SetInputData(polydata);
+    extrude->SetAngle(angle);
+    extrude->SetRotationAxis(axis_.GetDataPtr<double>());
+    extrude->SetResolution(resolution);
+    extrude->SetTranslation(translation);
+    extrude->SetCapping(capping);
+
+    vtkNew<vtkTriangleFilter> triangulate;
+    triangulate->SetInputConnection(extrude->GetOutputPort());
+    triangulate->Update();
+    vtkSmartPointer<vtkPolyData> swept_polydata = triangulate->GetOutput();
+    return swept_polydata;
+}
+
+OPEN3D_LOCAL TriangleMesh ExtrudeRotationTriangleMesh(const Geometry& geometry,
+                                                      const double angle,
+                                                      const core::Tensor& axis,
+                                                      int resolution,
+                                                      double translation,
+                                                      bool capping) {
+    auto polydata = ExtrudeRotationPolyData(geometry, angle, axis, resolution,
+                                            translation, capping);
+    return CreateTriangleMeshFromVtkPolyData(polydata);
+}
+
+OPEN3D_LOCAL LineSet ExtrudeRotationLineSet(const PointCloud& pointcloud,
+                                            const double angle,
+                                            const core::Tensor& axis,
+                                            int resolution,
+                                            double translation,
+                                            bool capping) {
+    auto polydata = ExtrudeRotationPolyData(pointcloud, angle, axis, resolution,
+                                            translation, capping);
+    return CreateLineSetFromVtkPolyData(polydata);
+}
+
+static vtkSmartPointer<vtkPolyData> ExtrudeLinearPolyData(
+        const Geometry& geometry,
+        const core::Tensor& vector,
+        double scale,
+        bool capping) {
+    core::AssertTensorShape(vector, {3});
+    // allow int types for convenience
+    core::AssertTensorDtypes(
+            vector, {core::Float32, core::Float64, core::Int32, core::Int64});
+    auto vector_ = vector.To(core::Device(), core::Float64).Contiguous();
+
+    auto polydata =
+            CreateVtkPolyDataFromGeometry(geometry, {}, {}, {}, {}, false);
+
+    vtkNew<vtkLinearExtrusionFilter> extrude;
+    extrude->SetInputData(polydata);
+    extrude->SetExtrusionTypeToVectorExtrusion();
+    extrude->SetVector(vector_.GetDataPtr<double>());
+    extrude->SetScaleFactor(scale);
+    extrude->SetCapping(capping);
+
+    vtkNew<vtkTriangleFilter> triangulate;
+    triangulate->SetInputConnection(extrude->GetOutputPort());
+    triangulate->Update();
+    vtkSmartPointer<vtkPolyData> swept_polydata = triangulate->GetOutput();
+    return swept_polydata;
+}
+
+OPEN3D_LOCAL TriangleMesh ExtrudeLinearTriangleMesh(const Geometry& geometry,
+                                                    const core::Tensor& vector,
+                                                    double scale,
+                                                    bool capping) {
+    auto polydata = ExtrudeLinearPolyData(geometry, vector, scale, capping);
+    return CreateTriangleMeshFromVtkPolyData(polydata);
+}
+
+OPEN3D_LOCAL LineSet ExtrudeLinearLineSet(const PointCloud& pointcloud,
+                                          const core::Tensor& vector,
+                                          double scale,
+                                          bool capping) {
+    auto polydata = ExtrudeLinearPolyData(pointcloud, vector, scale, capping);
+    return CreateLineSetFromVtkPolyData(polydata);
+}
+
+OPEN3D_LOCAL TriangleMesh ComputeNormals(const TriangleMesh& mesh,
+                                         bool vertex_normals,
+                                         bool face_normals,
+                                         bool consistency,
+                                         bool auto_orient_normals,
+                                         bool splitting,
+                                         double feature_angle_deg) {
+    auto polydata = CreateVtkPolyDataFromGeometry(
+            mesh, mesh.GetVertexAttr().GetKeySet(), {}, {}, {}, false);
+
+    vtkNew<vtkPolyDataNormals> normals;
+    normals->SetInputData(polydata);
+    normals->SetComputePointNormals(vertex_normals);
+    normals->SetComputeCellNormals(face_normals);
+    normals->SetConsistency(consistency);
+    normals->SetAutoOrientNormals(auto_orient_normals);
+    normals->SetSplitting(splitting);
+    normals->SetFeatureAngle(feature_angle_deg);
+    normals->Update();
+    vtkSmartPointer<vtkPolyData> normals_polydata = normals->GetOutput();
+
+    return CreateTriangleMeshFromVtkPolyData(normals_polydata);
 }
 
 }  // namespace vtkutils

@@ -1,27 +1,8 @@
 // ----------------------------------------------------------------------------
 // -                        Open3D: www.open3d.org                            -
 // ----------------------------------------------------------------------------
-// The MIT License (MIT)
-//
-// Copyright (c) 2018-2021 www.open3d.org
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-// IN THE SOFTWARE.
+// Copyright (c) 2018-2023 www.open3d.org
+// SPDX-License-Identifier: MIT
 // ----------------------------------------------------------------------------
 
 #include "pybind/core/nns/nearest_neighbor_search.h"
@@ -37,24 +18,17 @@ namespace open3d {
 namespace core {
 namespace nns {
 
-void pybind_core_nns(py::module &m_nns) {
-    static const std::unordered_map<std::string, std::string>
-            map_nearest_neighbor_search_method_docs = {
-                    {"query_points", "The query tensor of shape {n_query, d}."},
-                    {"radii",
-                     "Tensor of shape {n_query,} containing multiple radii, "
-                     "one for each query point."},
-                    {"radius", "Radius value for radius search."},
-                    {"max_knn",
-                     "Maximum number of neighbors to search per query point."},
-                    {"knn", "Number of neighbors to search per query point."}};
-
+void pybind_core_nns_declarations(py::module &m_nns) {
     py::class_<NearestNeighborSearch, std::shared_ptr<NearestNeighborSearch>>
             nns(m_nns, "NearestNeighborSearch",
                 "NearestNeighborSearch class for nearest neighbor search. "
                 "Construct a NearestNeighborSearch object with input "
                 "dataset_points of shape {n_dataset, d}.");
-
+}
+void pybind_core_nns_definitions(py::module &m_nns) {
+    auto nns = static_cast<py::class_<NearestNeighborSearch,
+                                      std::shared_ptr<NearestNeighborSearch>>>(
+            m_nns.attr("NearestNeighborSearch"));
     // Constructors.
     nns.def(py::init<const Tensor &, const Dtype>(), "dataset_points"_a,
             "index_dtype"_a = core::Int64);
@@ -110,6 +84,16 @@ void pybind_core_nns(py::module &m_nns) {
             "Perform hybrid search.");
 
     // Docstrings.
+    static const std::unordered_map<std::string, std::string>
+            map_nearest_neighbor_search_method_docs = {
+                    {"query_points", "The query tensor of shape {n_query, d}."},
+                    {"radii",
+                     "Tensor of shape {n_query,} containing multiple radii, "
+                     "one for each query point."},
+                    {"radius", "Radius value for radius search."},
+                    {"max_knn",
+                     "Maximum number of neighbors to search per query point."},
+                    {"knn", "Number of neighbors to search per query point."}};
     docstring::ClassMethodDocInject(m_nns, "NearestNeighborSearch",
                                     "knn_search",
                                     map_nearest_neighbor_search_method_docs);

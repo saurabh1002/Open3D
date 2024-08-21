@@ -67,10 +67,10 @@ commands:
 
     cd docker
 
-    ./docker_build.sh openblas-arm64-py36  # Python 3.6
-    ./docker_build.sh openblas-arm64-py37  # Python 3.7
-    ./docker_build.sh openblas-arm64-py38  # Python 3.8
-    ./docker_build.sh openblas-arm64-py39  # Python 3.9
+    ./docker_build.sh openblas-arm64-py38   # Python 3.8
+    ./docker_build.sh openblas-arm64-py39   # Python 3.9
+    ./docker_build.sh openblas-arm64-py310  # Python 3.10
+    ./docker_build.sh openblas-arm64-py311  # Python 3.11
 
 After running ``docker_build.sh``, you shall see a ``.whl`` file generated the
 current directly on the host. Then simply install the ``.whl`` file by:
@@ -116,7 +116,6 @@ Install dependencies
 
     # Install dependencies
     ./util/install_deps_ubuntu.sh
-    sudo apt-get install -y clang-7  # Or any >= 7 version of clang.
 
     # Optional: ccache is recommended to speed up subsequent builds
     sudo apt-get install -y ccache
@@ -172,13 +171,14 @@ Compiling Open3D on ARM64 macOS
     # Optional: activate your virtualenv
     conda activate your-virtual-env
 
-    # Configure
+    # Configure and choose build options
     cd Open3D && mkdir build && cd build
-    cmake ..
+    cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TENSORFLOW_OPS=ON -DBUILD_PYTORCH_OPS=ON -DBUNDLE_OPEN3D_ML=ON ..
 
     # Build
-    make -j8
-    make install-pip-package -j8
+    make pip-package -j8    # Build Python wheel
+    make package -j8        # Build macOS devel binary package
+    make Open3DViewer -j8   # Build Open3D viewer app
 
     # Test C++ viewer app
     ./bin/Open3D/Open3D

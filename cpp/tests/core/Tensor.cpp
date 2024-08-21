@@ -1,30 +1,13 @@
 // ----------------------------------------------------------------------------
 // -                        Open3D: www.open3d.org                            -
 // ----------------------------------------------------------------------------
-// The MIT License (MIT)
-//
-// Copyright (c) 2018-2021 www.open3d.org
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-// IN THE SOFTWARE.
+// Copyright (c) 2018-2023 www.open3d.org
+// SPDX-License-Identifier: MIT
 // ----------------------------------------------------------------------------
 
 #include "open3d/core/Tensor.h"
+
+#include <gmock/gmock.h>
 
 #include <cmath>
 #include <limits>
@@ -47,11 +30,23 @@ INSTANTIATE_TEST_SUITE_P(Tensor,
                          TensorPermuteDevices,
                          testing::ValuesIn(PermuteDevices::TestCases()));
 
+class TensorPermuteDevicesWithSYCL : public PermuteDevices {};
+INSTANTIATE_TEST_SUITE_P(
+        Tensor,
+        TensorPermuteDevicesWithSYCL,
+        testing::ValuesIn(PermuteDevicesWithSYCL::TestCases()));
+
 class TensorPermuteDevicePairs : public PermuteDevicePairs {};
 INSTANTIATE_TEST_SUITE_P(
         Tensor,
         TensorPermuteDevicePairs,
         testing::ValuesIn(TensorPermuteDevicePairs::TestCases()));
+
+class TensorPermuteDevicePairsWithSYCL : public PermuteDevicePairsWithSYCL {};
+INSTANTIATE_TEST_SUITE_P(
+        Tensor,
+        TensorPermuteDevicePairsWithSYCL,
+        testing::ValuesIn(TensorPermuteDevicePairsWithSYCL::TestCases()));
 
 class TensorPermuteSizesDefaultStridesAndDevices
     : public testing::TestWithParam<
@@ -71,7 +66,7 @@ static constexpr const T &AsConst(T &t) noexcept {
     return t;
 }
 
-TEST_P(TensorPermuteDevices, Constructor) {
+TEST_P(TensorPermuteDevicesWithSYCL, Constructor) {
     core::Device device = GetParam();
     core::Dtype dtype = core::Float32;
 
@@ -88,7 +83,7 @@ TEST_P(TensorPermuteDevices, Constructor) {
     EXPECT_ANY_THROW(core::Tensor({-1, -1}, dtype, device));
 }
 
-TEST_P(TensorPermuteDevices, ConstructorBool) {
+TEST_P(TensorPermuteDevicesWithSYCL, ConstructorBool) {
     core::Device device = GetParam();
 
     core::SizeVector shape{2, 3};
@@ -122,7 +117,7 @@ TEST_P(TensorPermuteDevices, WithInitValue) {
     EXPECT_EQ(t.ToFlatVector<float>(), vals);
 }
 
-TEST_P(TensorPermuteDevices, WithInitList) {
+TEST_P(TensorPermuteDevicesWithSYCL, WithInitList) {
     core::Device device = GetParam();
 
     core::Tensor t;
@@ -204,7 +199,7 @@ TEST_P(TensorPermuteDevices, WithInitList) {
                  std::exception);
 }
 
-TEST_P(TensorPermuteDevices, WithInitValueBool) {
+TEST_P(TensorPermuteDevicesWithSYCL, WithInitValueBool) {
     core::Device device = GetParam();
 
     std::vector<bool> vals{true, false, true, true, false, false};
@@ -212,7 +207,7 @@ TEST_P(TensorPermuteDevices, WithInitValueBool) {
     EXPECT_EQ(t.ToFlatVector<bool>(), vals);
 }
 
-TEST_P(TensorPermuteDevices, WithInitValueTypeMismatch) {
+TEST_P(TensorPermuteDevicesWithSYCL, WithInitValueTypeMismatch) {
     core::Device device = GetParam();
 
     std::vector<int> vals{0, 1, 2, 3, 4, 5};
@@ -220,7 +215,7 @@ TEST_P(TensorPermuteDevices, WithInitValueTypeMismatch) {
                  std::runtime_error);
 }
 
-TEST_P(TensorPermuteDevices, WithInitValueSizeMismatch) {
+TEST_P(TensorPermuteDevicesWithSYCL, WithInitValueSizeMismatch) {
     core::Device device = GetParam();
 
     std::vector<float> vals{0, 1, 2, 3, 4};
@@ -315,7 +310,7 @@ TEST_P(TensorPermuteDevicePairs, IndexSetFillFancy) {
                                   0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0}));
 }
 
-TEST_P(TensorPermuteDevicePairs, Copy) {
+TEST_P(TensorPermuteDevicePairsWithSYCL, Copy) {
     core::Device dst_device;
     core::Device src_device;
     std::tie(dst_device, src_device) = GetParam();
@@ -334,7 +329,7 @@ TEST_P(TensorPermuteDevicePairs, Copy) {
     EXPECT_EQ(dst_t.ToFlatVector<float>(), vals);
 }
 
-TEST_P(TensorPermuteDevicePairs, CopyBool) {
+TEST_P(TensorPermuteDevicePairsWithSYCL, CopyBool) {
     core::Device dst_device;
     core::Device src_device;
     std::tie(dst_device, src_device) = GetParam();
@@ -374,11 +369,14 @@ TEST_P(TensorPermuteDevicePairs, ToDevice) {
     core::Device src_device;
     std::tie(dst_device, src_device) = GetParam();
 
-    core::Tensor src_t = core::Tensor::Init<float>({0, 1, 2, 3}, src_device);
+    core::Tensor src_t =
+            core::Tensor::Init<float>({0.f, 1.f, 2.f, 3.f}, src_device);
     core::Tensor dst_t = src_t.To(dst_device);
     EXPECT_TRUE(dst_t.To(src_device).AllClose(src_t));
 
     EXPECT_ANY_THROW(src_t.To(core::Device("CPU:1")));
+
+    EXPECT_ANY_THROW(src_t.To(core::Device("SYCL:100")));
 
     EXPECT_ANY_THROW(src_t.To(core::Device("CUDA:-1")));
     EXPECT_ANY_THROW(src_t.To(core::Device("CUDA:100000")));
@@ -546,7 +544,7 @@ TEST_P(TensorPermuteDevices, Flatten) {
     EXPECT_ANY_THROW(src_t.Flatten(2, 1));
 }
 
-TEST_P(TensorPermuteDevices, DefaultStrides) {
+TEST_P(TensorPermuteDevicesWithSYCL, DefaultStrides) {
     core::Device device = GetParam();
 
     core::Tensor t0({}, core::Float32, device);
@@ -680,13 +678,15 @@ TEST_P(TensorPermuteDevices, ItemAssign) {
     EXPECT_EQ(t[1][2][3].Item<float>(), 101);
 }
 
-TEST_P(TensorPermuteDevices, ToString) {
+TEST_P(TensorPermuteDevicesWithSYCL, ToString) {
+    using ::testing::AnyOf;
     core::Device device = GetParam();
     core::Tensor t;
 
     // 0D
     t = core::Tensor::Ones({}, core::Float32, device);
-    EXPECT_EQ(t.ToString(/*with_suffix=*/false), R"(1.0)");
+    // IntelLLVM / fmt 6 adds 1 decimal place
+    EXPECT_THAT(t.ToString(/*with_suffix=*/false), AnyOf(R"(1)", R"(1.0)"));
     t = core::Tensor::Full({}, std::numeric_limits<float>::quiet_NaN(),
                            core::Float32, device);
     EXPECT_EQ(t.ToString(/*with_suffix=*/false), R"(nan)");
@@ -697,7 +697,9 @@ TEST_P(TensorPermuteDevices, ToString) {
     // 1D float
     t = core::Tensor(std::vector<float>{0, 1, 2, 3, 4}, {5}, core::Float32,
                      device);
-    EXPECT_EQ(t.ToString(/*with_suffix=*/false), R"([0.0 1.0 2.0 3.0 4.0])");
+    // IntelLLVM / fmt 6 adds 1 decimal place
+    EXPECT_THAT(t.ToString(/*with_suffix=*/false),
+                AnyOf(R"([0 1 2 3 4])", R"([0.0 1.0 2.0 3.0 4.0])"));
 
     // 1D int
     std::vector<int32_t> vals{0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11,
@@ -751,7 +753,7 @@ TEST_P(TensorPermuteDevices, ToString) {
  [True False False]])");
 }
 
-TEST_P(TensorPermuteDevicePairs, CopyContiguous) {
+TEST_P(TensorPermuteDevicePairsWithSYCL, CopyContiguous) {
     core::Device dst_device;
     core::Device src_device;
     std::tie(dst_device, src_device) = GetParam();
@@ -1428,6 +1430,40 @@ TEST_P(TensorPermuteDevicePairs, IndexSetBroadcast) {
                                   0, 0, 0, 0, 20, 20, 20, 0, 0, 0, 0, 0}));
 }
 
+TEST_P(TensorPermuteDevices, IndexAdd_) {
+    core::Device device = GetParam();
+
+    const int tensor_size = 100;
+
+    // Test one: dst_t[np.array([0, 1, 2, 3, 4])] += np.array([1, 1, 1, 1, 1])
+    {
+        core::Tensor index =
+                core::Tensor::Arange(0, tensor_size, 1, core::Int64, device);
+        core::Tensor src =
+                core::Tensor::Zeros({tensor_size}, core::Float32, device);
+        src.IndexAdd_(
+                /*dim=*/0, index,
+                core::Tensor::Ones({tensor_size}, core::Float32, device));
+        EXPECT_TRUE(src.AllClose(
+                core::Tensor::Ones({tensor_size}, core::Float32, device)));
+    }
+
+    // Test two: dst_t[np.array([0, 0, 0, 0, 0])] += np.array([1, 1, 1, 1, 1])
+    {
+        core::Tensor index =
+                core::Tensor::Zeros({tensor_size}, core::Int64, device);
+        core::Tensor src =
+                core::Tensor::Zeros({tensor_size}, core::Float32, device);
+        src.IndexAdd_(
+                /*dim=*/0, index,
+                core::Tensor::Ones({tensor_size}, core::Float32, device));
+        EXPECT_EQ(src[0].Item<float>(), tensor_size);
+        EXPECT_TRUE(src.Slice(0, 1, tensor_size)
+                            .AllClose(core::Tensor::Zeros(
+                                    {tensor_size - 1}, core::Float32, device)));
+    }
+}
+
 TEST_P(TensorPermuteDevices, Permute) {
     core::Device device = GetParam();
 
@@ -2009,7 +2045,7 @@ TEST_P(TensorPermuteDevices, ReduceSumLargeArray) {
     int64_t max_size = *std::max_element(sizes.begin(), sizes.end());
     std::vector<int> vals(max_size);
     std::transform(vals.begin(), vals.end(), vals.begin(), [](int x) -> int {
-        return utility::random::UniformIntGenerator(0, 3)();
+        return utility::random::UniformIntGenerator<int>(0, 3)();
     });
 
     for (int64_t size : sizes) {
@@ -2349,6 +2385,21 @@ TEST_P(TensorPermuteDevices, Neg) {
     // Also works for int.
     src = core::Tensor(std::vector<int>{-1, 0, 2}, {1, 3}, core::Int32, device);
     dst = src.Neg();
+    EXPECT_EQ(dst.ToFlatVector<int>(), std::vector<int>({1, 0, -2}));
+}
+
+TEST_P(TensorPermuteDevices, UnaryMinus) {
+    core::Device device = GetParam();
+
+    std::vector<float> dst_vals{2, 1, 0, -1, -2, -3};
+    core::Tensor src =
+            core::Tensor::Init<float>({{-2, -1, 0}, {1, 2, 3}}, device);
+    core::Tensor dst = -src;
+    EXPECT_EQ(dst.ToFlatVector<float>(), dst_vals);
+
+    // Also works for int.
+    src = core::Tensor(std::vector<int>{-1, 0, 2}, {1, 3}, core::Int32, device);
+    dst = -src;
     EXPECT_EQ(dst.ToFlatVector<int>(), std::vector<int>({1, 0, -2}));
 }
 

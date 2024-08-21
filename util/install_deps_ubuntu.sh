@@ -11,14 +11,17 @@ else
 fi
 
 deps=(
+    git
     # Open3D
     xorg-dev
+    libxcb-shm0
     libglu1-mesa-dev
     python3-dev
     # Filament build-from-source
-    libsdl2-dev
+    clang
     libc++-dev
     libc++abi-dev
+    libsdl2-dev
     ninja-build
     libxi-dev
     # ML
@@ -31,18 +34,23 @@ deps=(
     libtool
 )
 
-# Ubuntu ARM64
-if [ "$(uname -m)" == "aarch64" ]; then
-    # For LAPACK
-    deps+=("gfortran")
+eval $(
+    source /etc/lsb-release;
+    echo DISTRIB_ID="$DISTRIB_ID";
+    echo DISTRIB_RELEASE="$DISTRIB_RELEASE"
+)
+if [ "$DISTRIB_ID" == "Ubuntu" -a "$DISTRIB_RELEASE" == "20.04" ]; then
+    # Ubuntu 20.04's clang/libc++-dev/libc++abi-dev are version 8, 10 or 12.
+    # To avoid dependence on libunwind, we don't want to use versions later than 10.
+    deps=("${deps[@]/clang/clang-10}")
+    deps=("${deps[@]/libc++-dev/libc++-10-dev}")
+    deps=("${deps[@]/libc++abi-dev/libc++abi-10-dev}")
+fi
 
-    # For compiling Filament from source
-    # Ubuntu 18.04 ARM64's libc++-dev and libc++abi-dev are version 6, but we need 7+.
-    source /etc/lsb-release
-    if [ "$DISTRIB_ID" == "Ubuntu" -a "$DISTRIB_RELEASE" == "18.04" ]; then
-        deps=("${deps[@]/libc++-dev/libc++-7-dev}")
-        deps=("${deps[@]/libc++abi-dev/libc++abi-7-dev}")
-    fi
+# Special case for ARM64
+if [ "$(uname -m)" == "aarch64" ]; then
+    # For compling LAPACK in OpenBLAS
+    deps+=("gfortran")
 fi
 
 echo "apt-get install ${deps[*]}"

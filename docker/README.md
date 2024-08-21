@@ -26,12 +26,12 @@ to install Nvidia Docker to run the CUDA container.
 To verify that the Nvidia Docker is working, run:
 
 ```bash
-docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi
+docker run --rm --gpus all nvidia/cuda:11.7-base nvidia-smi
 ```
 
 ### ARM64 Docker
 
-You can build and run ARM64 docker. This works on a ARM64 host including Apple
+You can build and run ARM64 docker. This works on an ARM64 host including Apple
 Silicon. However, if your host is x86-64, you will need to install QEMU:
 
 ```bash
@@ -48,7 +48,7 @@ To verify that the ARM64 environment is working, run:
 # The following warning message is expected: "WARNING: The requested image's
 # platform (linux/arm64/v8) does not match the detected host platform
 # (linux/amd64) and no specific platform was requested aarch64."
-docker run --rm arm64v8/ubuntu:18.04 uname -p
+docker run --rm arm64v8/ubuntu:24.04 uname -p
 ```
 
 ## Build and test Docker
@@ -59,10 +59,10 @@ For example:
 cd docker
 
 # Build Docker.
-./docker_build.sh openblas-amd64-py36-dev
+./docker_build.sh openblas-amd64-py38-dev
 
 # Test Docker.
-./docker_test.sh openblas-amd64-py36-dev
+./docker_test.sh openblas-amd64-py38-dev
 ```
 
 See `./docker_build.sh` and `./docker_test.sh` for all available options.

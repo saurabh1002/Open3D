@@ -8,15 +8,15 @@ Build from source
 System requirements
 -------------------
 
-* C++14 compiler:
+* C++17 compiler:
 
-  * Ubuntu 18.04+: GCC 5+, Clang 7+
+  * Ubuntu 20.04+: GCC 5+, Clang 7+
   * macOS 10.15+: XCode 8.0+
   * Windows 10 (64-bit): Visual Studio 2019+
 
-* CMake: 3.19+
+* CMake: 3.24+
 
-  * Ubuntu (18.04 / 20.04):
+  * Ubuntu (20.04+):
 
     * Install with ``apt-get``: see `official APT repository <https://apt.kitware.com/>`_
     * Install with ``snap``: ``sudo snap install cmake --classic``
@@ -238,12 +238,6 @@ The visualization module depends on the Filament rendering engine and, by defaul
 Open3D uses a prebuilt version of it. You can also build Filament from source
 by setting ``BUILD_FILAMENT_FROM_SOURCE=ON``.
 
-.. note::
-    Whereas Open3D only requires a C++14 compiler, Filament needs a C++17 compiler
-    and only supports Clang 7+, the most recent version of Xcode, and Visual Studio 2019,
-    see `their building instructions <https://github.com/google/filament/blob/main/BUILDING.md>`_.
-    Make sure to use one of these compiler if you build Open3D with ``BUILD_FILAMENT_FROM_SOURCE=ON``.
-
 ML Module
 `````````
 
@@ -256,16 +250,17 @@ pipelines from Open3D-ML in the python package, set ``BUNDLE_OPEN3D_ML=ON`` and
 Open3D-ML from GitHub during the build with
 ``OPEN3D_ML_ROOT=https://github.com/isl-org/Open3D-ML.git``.
 
-.. warning:: Compiling PyTorch ops with CUDA 11 may have stability issues. See
-    `Open3D issue #3324 <https://github.com/isl-org/Open3D/issues/3324>`_ and
-    `PyTorch issue #52663 <https://github.com/pytorch/pytorch/issues/52663>`_ for
-    more information on this problem.
+.. warning:: Compiling PyTorch ops with CUDA 11 and PyTorch < 1.9 may have
+    stability issues. See `Open3D issue #3324 <https://github.com/isl-org/Open3D/issues/3324>`_
+    and `PyTorch issue #52663 <https://github.com/pytorch/pytorch/issues/52663>`_
+    for more information on this problem. Official PyTorch wheels 1.9 and later
+    do not have this problem.
 
     We recommend to compile Pytorch from source
-    with compile flags ``-Xcompiler -fno-gnu-unique`` or use the `PyTorch
+    with compile flags ``-Xcompiler -fno-gnu-unique`` or use the `PyTorch 1.8.2
     wheels from Open3D.
     <https://github.com/isl-org/open3d_downloads/releases/tag/torch1.8.2>`_
-    To reproduce the Open3D PyTorch wheels see the builder repository `here.
+    To reproduce the Open3D PyTorch 1.8.2 wheels see the builder repository `here.
     <https://github.com/isl-org/pytorch_builder>`_
 
 The following example shows the command for building the ops with GPU support
@@ -389,8 +384,8 @@ After installing ``ccache``, simply reconfigure and recompile the Open3D
 library. Open3D's CMake script can detect and use it automatically. You don't
 need to setup additional paths except for the ``ccache`` program itself.
 
-Ubuntu 18.04, 20.04
-```````````````````
+Ubuntu 20.04+
+`````````````
 
 If you install ``ccache`` via ``sudo apt install ccache``, the 3.x version will
 be installed. To cache CUDA compilations, you'll need the 4.0+ version. Here, we

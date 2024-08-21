@@ -41,32 +41,96 @@ target_include_directories(pybind SYSTEM PRIVATE
 
 open3d_show_and_abort_on_warning(pybind)
 open3d_set_global_properties(pybind)
+target_link_libraries(pybind PRIVATE Open3D::Open3D)
+
 
 if (WIN32)
     target_link_options(pybind PUBLIC "/force:multiple")
+    # TODO(Sameer): Only export PyInit_pybind, open3d_core_cuda_device_count
+elseif (APPLE)
+    file(GENERATE OUTPUT pybind.map CONTENT
+        [=[_PyInit_pybind
+open3d_core_cuda_device_count
+        ]=])
+    target_link_options(pybind PRIVATE $<$<CONFIG:Release>:
+        -Wl,-exported_symbols_list
+        "${CMAKE_CURRENT_BINARY_DIR}/pybind.map" >)
+elseif (UNIX)   # Linux
+    file(GENERATE OUTPUT pybind.map CONTENT
+        [=[{
+    global:
+        PyInit_pybind;
+        open3d_core_cuda_device_count;
+    local:
+        *;
+};]=])
+    target_link_options(pybind PRIVATE $<$<CONFIG:Release>:
+        "-Wl,--version-script=${CMAKE_CURRENT_BINARY_DIR}/pybind.map" >)
+    target_link_options(pybind PRIVATE "-flto=auto")
 endif()
 
-target_link_libraries(pybind PRIVATE Open3D::Open3D)
 
 # At `make`: open3d.so (or the equivalents) will be created at
 # PYTHON_COMPILED_MODULE_DIR. The default location is
 # `build/lib/${CMAKE_BUILD_TYPE}/Python/{cpu|cuda}`
 set(PYTHON_COMPILED_MODULE_DIR
     "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/Python/$<IF:$<BOOL:${BUILD_CUDA_MODULE}>,cuda,cpu>")
+
+# Set BUILD_RPATH to find tbb (and a shared libOpen3D). We don't install through cmake.
+if (APPLE)
+    set_target_properties(pybind PROPERTIES BUILD_RPATH "@loader_path;@loader_path/..")
+elseif (UNIX)
+    set_target_properties(pybind PROPERTIES BUILD_RPATH "$ORIGIN;$ORIGIN/..")
+endif()
 set_target_properties(pybind PROPERTIES
                       FOLDER "Python"
                       LIBRARY_OUTPUT_DIRECTORY "${PYTHON_COMPILED_MODULE_DIR}"
                       ARCHIVE_OUTPUT_DIRECTORY "${PYTHON_COMPILED_MODULE_DIR}")
+
+if (BUILD_SHARED_LIBS)
+    if (WIN32)    # CMake does not add soversion suffix to WIN32 DLLs
+        set(_libopen3d_soname "Open3D.dll")
+    elseif(APPLE)
+        set(_libopen3d_soname "libOpen3D.${OPEN3D_ABI_VERSION}.dylib")
+    else()
+        set(_libopen3d_soname "libOpen3D.so.${OPEN3D_ABI_VERSION}")
+    endif()
+    add_custom_command(TARGET pybind POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:Open3D> $<TARGET_FILE_DIR:pybind>/${_libopen3d_soname}
+    )
+endif()
 # Include additional libraries that may be absent from the user system
-# eg: libc++.so and libc++abi.so (needed by filament) for Linux.
+# eg: libc++.so, libc++abi.so (needed by filament) for Linux.
 # libc++.so is a linker script including libc++.so.1 and libc++abi.so, so append 1 to libc++.so
-set(PYTHON_EXTRA_LIBRARIES "")
+set(PYTHON_EXTRA_LIBRARIES $<TARGET_FILE:tbb>)
 if (BUILD_GUI AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
     list(APPEND PYTHON_EXTRA_LIBRARIES ${CPP_LIBRARY}.1 ${CPPABI_LIBRARY})
 endif()
+if (WITH_OPENMP AND APPLE AND NOT BUILD_SHARED_LIBS)
+# Package libomp v11.1.0, if it is not installed. Later version cause crash on
+# x86_64 if PyTorch is already imported. Case of shared libopen3d.dylib is not
+# handled.
+# https://github.com/microsoft/LightGBM/issues/4229
+    list(APPEND PYTHON_EXTRA_LIBRARIES ${OpenMP_libomp_LIBRARY})
+    execute_process(COMMAND brew list --versions libomp
+        COMMAND cut "-d\ " -f2
+        OUTPUT_VARIABLE libomp_ver OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(libomp_ver VERSION_GREATER_EQUAL 12.0.0)
+        message(SEND_ERROR "libomp ${libomp_ver} found, which can lead to interoperability problems with other Python libraries using libomp.  Please use libomp v11.1 to build Open3D.")
+    endif()
+    file(GENERATE OUTPUT update_pybind_libomp.sh
+        CONTENT [=[libomp_library=$(dyld_info -dependents "$<TARGET_FILE:pybind>" |
+grep libomp | tr -d '[:space:]')
+install_name_tool -change $libomp_library @rpath/$(basename $libomp_library) \
+"$<TARGET_FILE:pybind>"]=])
+    add_custom_command(TARGET pybind POST_BUILD
+        COMMAND bash update_pybind_libomp.sh
+        COMMENT "Updating pybind to use packaged libomp")
+endif()
 
 # Use `make python-package` to create the python package in the build directory
-# The python package will be created at PYTHON_PACKAGE_DIR. It contains:
+# The python package will be created at PYTHON_PACKAGE_DST_DIR. It contains:
 # 1) Pure-python code and misc files, copied from python/package
 # 2) The compiled python-C++ module, i.e. open3d.so (or the equivalents)
 # 3) Configured files and supporting files
@@ -78,13 +142,17 @@ message(STATUS "PYPI_PACKAGE_NAME: ${PYPI_PACKAGE_NAME}")
 
 # add the open3d python module first
 set(COMPILED_MODULE_PATH_LIST $<TARGET_FILE:pybind>)
+# add the open3d DSO / DLL if shared
+if (BUILD_SHARED_LIBS)
+    list(APPEND COMPILED_MODULE_PATH_LIST $<TARGET_FILE_DIR:pybind>/${_libopen3d_soname})
+endif()
 
 set(GENERATED_OUTPUTS "")
 
 # add additional optional compiled modules
 if (BUILD_TENSORFLOW_OPS)
-    list( APPEND COMPILED_MODULE_PATH_LIST $<TARGET_FILE:open3d_tf_ops> )
-    add_custom_command( OUTPUT "${CMAKE_BINARY_DIR}/lib/ml/tf/python/ops/ops.py"
+    list(APPEND COMPILED_MODULE_PATH_LIST $<TARGET_FILE:open3d_tf_ops> )
+    add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/lib/ml/tf/python/ops/ops.py"
             COMMAND ${Python3_EXECUTABLE} generate_tf_ops_wrapper.py --input "${PYTHON_PACKAGE_SRC_DIR}/open3d/ml/tf/python/ops/ops.py.in" --output "${CMAKE_BINARY_DIR}/lib/ml/tf/python/ops/ops.py" --lib $<TARGET_FILE:open3d_tf_ops>
                         DEPENDS open3d_tf_ops
                         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -127,6 +195,8 @@ if (BUNDLE_OPEN3D_ML)
         open3d_ml
         PREFIX "${CMAKE_BINARY_DIR}/open3d_ml"
         GIT_REPOSITORY "${OPEN3D_ML_ROOT}"
+        GIT_TAG origin/main
+        GIT_SHALLOW
         BUILD_IN_SOURCE ON
         # do not configure
         CONFIGURE_COMMAND ""
@@ -159,6 +229,7 @@ add_custom_target(python-package
             -DBUNDLE_OPEN3D_ML=${BUNDLE_OPEN3D_ML}
             -DOPEN3D_ML_ROOT=${OPEN3D_ML_ROOT}
             -DBUILD_GUI=${BUILD_GUI}
+            -DBUILD_CUDA_MODULE=${BUILD_CUDA_MODULE}
             -DGUI_RESOURCE_DIR=${GUI_RESOURCE_DIR}
             -DPROJECT_EMAIL=${PROJECT_EMAIL}
             -DPROJECT_HOMEPAGE_URL=${PROJECT_HOMEPAGE_URL}
@@ -166,6 +237,7 @@ add_custom_target(python-package
             -DPROJECT_CODE=${PROJECT_CODE}
             -DPROJECT_ISSUES=${PROJECT_ISSUES}
             -DPROJECT_VERSION=${OPEN3D_VERSION_FULL}
+            -DPROJECT_DESCRIPTION=${PROJECT_DESCRIPTION}
             -DPROJECT_VERSION_THREE_NUMBER=${PROJECT_VERSION_THREE_NUMBER}
             -DPYPI_PACKAGE_NAME=${PYPI_PACKAGE_NAME}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/make_python_package.cmake

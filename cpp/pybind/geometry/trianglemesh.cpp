@@ -1,27 +1,8 @@
 // ----------------------------------------------------------------------------
 // -                        Open3D: www.open3d.org                            -
 // ----------------------------------------------------------------------------
-// The MIT License (MIT)
-//
-// Copyright (c) 2018-2021 www.open3d.org
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-// IN THE SOFTWARE.
+// Copyright (c) 2018-2023 www.open3d.org
+// SPDX-License-Identifier: MIT
 // ----------------------------------------------------------------------------
 
 #include "open3d/geometry/TriangleMesh.h"
@@ -35,7 +16,7 @@
 namespace open3d {
 namespace geometry {
 
-void pybind_trianglemesh(py::module &m) {
+void pybind_trianglemesh_declarations(py::module &m) {
     py::class_<TriangleMesh, PyGeometry3D<TriangleMesh>,
                std::shared_ptr<TriangleMesh>, MeshBase>
             trianglemesh(m, "TriangleMesh",
@@ -43,6 +24,12 @@ void pybind_trianglemesh(py::module &m) {
                          "and triangles represented by the indices to the "
                          "vertices. Optionally, the mesh may also contain "
                          "triangle normals, vertex normals and vertex colors.");
+}
+void pybind_trianglemesh_definitions(py::module &m) {
+    auto trianglemesh =
+            static_cast<py::class_<TriangleMesh, PyGeometry3D<TriangleMesh>,
+                                   std::shared_ptr<TriangleMesh>, MeshBase>>(
+                    m.attr("TriangleMesh"));
     py::detail::bind_default_constructor<TriangleMesh>(trianglemesh);
     py::detail::bind_copy_functions<TriangleMesh>(trianglemesh);
     trianglemesh
@@ -84,7 +71,7 @@ void pybind_trianglemesh(py::module &m) {
                  "list is needed")
             .def("remove_duplicated_vertices",
                  &TriangleMesh::RemoveDuplicatedVertices,
-                 "Function that removes duplicated verties, i.e., vertices "
+                 "Function that removes duplicated vertices, i.e., vertices "
                  "that have identical coordinates.")
             .def("remove_duplicated_triangles",
                  &TriangleMesh::RemoveDuplicatedTriangles,
@@ -355,6 +342,12 @@ void pybind_trianglemesh(py::module &m) {
                         "Kazhdan. See https://github.com/mkazhdan/PoissonRecon",
                         "pcd"_a, "depth"_a = 8, "width"_a = 0, "scale"_a = 1.1,
                         "linear_fit"_a = false, "n_threads"_a = -1)
+            .def_static(
+                    "create_from_oriented_bounding_box",
+                    &TriangleMesh::CreateFromOrientedBoundingBox,
+                    "Factory function to create a solid oriented bounding box.",
+                    "obox"_a, "scale"_a = Eigen::Vector3d::Ones(),
+                    "create_uv_map"_a = false)
             .def_static("create_box", &TriangleMesh::CreateBox,
                         "Factory function to create a box. The left bottom "
                         "corner on the "
@@ -694,6 +687,12 @@ void pybind_trianglemesh(py::module &m) {
               "Number of threads used for reconstruction. Set to -1 to "
               "automatically determine it."}});
     docstring::ClassMethodDocInject(
+            m, "TriangleMesh", "create_from_oriented_bounding_box",
+            {{"obox", "OrientedBoundingBox object to create mesh of."},
+             {"scale",
+              "scale factor along each direction of OrientedBoundingBox"},
+             {"create_uv_map", "Add default uv map to the mesh."}});
+    docstring::ClassMethodDocInject(
             m, "TriangleMesh", "create_box",
             {{"width", "x-directional length."},
              {"height", "y-directional length."},
@@ -785,8 +784,6 @@ void pybind_trianglemesh(py::module &m) {
              {"width", "Width of the Mobius strip."},
              {"scale", "Scale the complete Mobius strip."}});
 }
-
-void pybind_trianglemesh_methods(py::module &m) {}
 
 }  // namespace geometry
 }  // namespace open3d
